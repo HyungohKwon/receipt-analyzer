@@ -1,0 +1,538 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>영수증 분석기</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: 'Segoe UI', 'Apple SD Gothic Neo', sans-serif;
+      background: #f0f2f5;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 40px 16px 60px;
+    }
+
+    h1 { font-size: 1.8rem; font-weight: 700; color: #1a1a2e; margin-bottom: 6px; }
+    .subtitle { color: #666; font-size: 0.95rem; margin-bottom: 28px; }
+
+    .card {
+      background: #fff;
+      border-radius: 16px;
+      box-shadow: 0 4px 24px rgba(0,0,0,0.08);
+      padding: 28px 32px;
+      width: 100%;
+      max-width: 820px;
+    }
+
+    /* ── 드롭존 ── */
+    #drop-zone {
+      border: 2px dashed #c0c7d4;
+      border-radius: 12px;
+      padding: 40px 24px;
+      text-align: center;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    #drop-zone.drag-over { border-color: #4f6ef7; background: #f0f3ff; }
+    #drop-zone .icon { font-size: 2.6rem; margin-bottom: 10px; }
+    #drop-zone p { color: #555; font-size: 1rem; line-height: 1.7; }
+    #drop-zone span { color: #4f6ef7; font-weight: 600; }
+    #drop-zone small { color: #aaa; font-size: 0.82rem; display: block; margin-top: 6px; }
+    #file-input { display: none; }
+
+    /* ── 파일 그리드 ── */
+    #file-grid {
+      display: none;
+      gap: 12px;
+      margin-top: 20px;
+      flex-wrap: wrap;
+    }
+
+    .file-card {
+      width: 140px;
+      border-radius: 10px;
+      border: 1px solid #e8eaf0;
+      overflow: hidden;
+      position: relative;
+      background: #fafafa;
+      flex-shrink: 0;
+    }
+    .file-card img {
+      width: 140px;
+      height: 110px;
+      object-fit: cover;
+      display: block;
+    }
+    .file-card .name {
+      font-size: 0.75rem;
+      color: #444;
+      padding: 5px 8px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .file-card .badge {
+      position: absolute;
+      top: 6px; right: 6px;
+      font-size: 0.7rem;
+      font-weight: 700;
+      padding: 2px 7px;
+      border-radius: 20px;
+      color: #fff;
+    }
+    .badge.waiting  { background: #aaa; }
+    .badge.loading  { background: #f59e0b; }
+    .badge.done     { background: #22c55e; }
+    .badge.error    { background: #ef4444; }
+
+    .file-card .remove-btn {
+      position: absolute;
+      top: 4px; left: 6px;
+      background: rgba(0,0,0,0.45);
+      color: #fff;
+      border: none;
+      border-radius: 50%;
+      width: 20px; height: 20px;
+      font-size: 0.75rem;
+      cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+      line-height: 1;
+    }
+
+    /* ── 버튼 행 ── */
+    .btn-row {
+      display: flex;
+      gap: 10px;
+      margin-top: 18px;
+      flex-wrap: wrap;
+    }
+    button {
+      padding: 10px 22px;
+      border: none;
+      border-radius: 8px;
+      font-size: 0.93rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: opacity 0.2s;
+    }
+    button:disabled { opacity: 0.45; cursor: not-allowed; }
+    button:not(:disabled):hover { opacity: 0.85; }
+    #add-btn      { background: #e8eaf0; color: #444; }
+    #analyze-btn  { background: #4f6ef7; color: #fff; }
+    #reset-btn    { background: #f0f2f5; color: #666; }
+    #export-btn   {
+      background: #16a34a; color: #fff;
+      display: none;
+      margin-left: auto;
+    }
+
+    /* ── 진행 표시 ── */
+    #progress-wrap {
+      display: none;
+      margin-top: 18px;
+    }
+    .progress-bar-bg {
+      height: 8px;
+      background: #e8eaf0;
+      border-radius: 99px;
+      overflow: hidden;
+      margin-bottom: 6px;
+    }
+    .progress-bar-fill {
+      height: 100%;
+      background: #4f6ef7;
+      border-radius: 99px;
+      transition: width 0.4s;
+      width: 0%;
+    }
+    #progress-label { font-size: 0.85rem; color: #666; }
+
+    /* ── 결과 ── */
+    #result-section { display: none; margin-top: 28px; }
+
+    .section-title {
+      font-size: 1.05rem;
+      font-weight: 700;
+      color: #1a1a2e;
+      margin-bottom: 14px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .receipt-block { margin-bottom: 24px; }
+
+    .receipt-header {
+      background: #f7f8fc;
+      border-radius: 10px;
+      padding: 12px 16px;
+      margin-bottom: 10px;
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr;
+      gap: 10px;
+    }
+    .rh-label { font-size: 0.75rem; color: #888; }
+    .rh-value { font-size: 0.97rem; font-weight: 700; color: #1a1a2e; margin-top: 2px; }
+    .rh-value.blue { color: #4f6ef7; }
+
+    .receipt-filename {
+      font-size: 0.8rem;
+      color: #aaa;
+      margin-bottom: 8px;
+    }
+
+    table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
+    thead th {
+      background: #4f6ef7; color: #fff;
+      padding: 9px 12px;
+      text-align: left; font-weight: 600;
+    }
+    thead th:not(:first-child) { text-align: right; }
+    tbody tr:nth-child(even) { background: #f7f8fc; }
+    tbody td { padding: 8px 12px; color: #333; border-bottom: 1px solid #eee; }
+    tbody td:not(:first-child) { text-align: right; }
+    .no-items { text-align: center !important; color: #bbb; padding: 16px; }
+
+    .divider { border: none; border-top: 1px solid #eee; margin: 20px 0; }
+
+    /* ── 오류 ── */
+    .err-inline {
+      background: #fff0f0;
+      border: 1px solid #ffc0c0;
+      border-radius: 8px;
+      padding: 10px 14px;
+      color: #c0392b;
+      font-size: 0.88rem;
+      margin-top: 8px;
+    }
+  </style>
+</head>
+<body>
+
+  <h1>🧾 영수증 분석기</h1>
+  <p class="subtitle">Gemini AI가 영수증을 읽고 항목을 자동으로 추출합니다</p>
+
+  <div class="card">
+
+    <!-- 드롭존 -->
+    <div id="drop-zone">
+      <div class="icon">📂</div>
+      <p>영수증 이미지를 여기에 드래그하거나 <span id="browse-btn">파일 선택</span></p>
+      <small>JPG · PNG · WEBP · 여러 파일 동시 선택 가능 · 최대 50MB</small>
+    </div>
+    <input type="file" id="file-input" accept="image/*" multiple>
+
+    <!-- 파일 그리드 -->
+    <div id="file-grid"></div>
+
+    <!-- 버튼 행 -->
+    <div class="btn-row" id="btn-row" style="display:none">
+      <button id="add-btn">+ 추가</button>
+      <button id="analyze-btn">▶ 전체 분석 시작</button>
+      <button id="reset-btn">초기화</button>
+      <button id="export-btn">⬇ 엑셀 다운로드</button>
+    </div>
+
+    <!-- 진행 표시 -->
+    <div id="progress-wrap">
+      <div class="progress-bar-bg">
+        <div class="progress-bar-fill" id="progress-fill"></div>
+      </div>
+      <div id="progress-label">준비 중...</div>
+    </div>
+
+    <!-- 결과 -->
+    <div id="result-section">
+      <div class="section-title">
+        <span>✅ 분석 결과</span>
+      </div>
+      <div id="result-body"></div>
+    </div>
+
+  </div>
+
+  <script>
+    const dropZone    = document.getElementById("drop-zone");
+    const fileInput   = document.getElementById("file-input");
+    const browseBtn   = document.getElementById("browse-btn");
+    const fileGrid    = document.getElementById("file-grid");
+    const btnRow      = document.getElementById("btn-row");
+    const addBtn      = document.getElementById("add-btn");
+    const analyzeBtn  = document.getElementById("analyze-btn");
+    const resetBtn    = document.getElementById("reset-btn");
+    const exportBtn   = document.getElementById("export-btn");
+    const progressWrap= document.getElementById("progress-wrap");
+    const progressFill= document.getElementById("progress-fill");
+    const progressLbl = document.getElementById("progress-label");
+    const resultSec   = document.getElementById("result-section");
+    const resultBody  = document.getElementById("result-body");
+
+    let queue   = [];   // {file, id, cardEl, badgeEl}
+    let results = [];   // {filename, data}
+    let analyzing = false;
+
+    // ── 파일 선택 ──
+    browseBtn.addEventListener("click", e => { e.stopPropagation(); fileInput.click(); });
+    dropZone.addEventListener("click", () => fileInput.click());
+    addBtn.addEventListener("click", () => fileInput.click());
+
+    fileInput.addEventListener("change", e => {
+      addFiles(Array.from(e.target.files));
+      fileInput.value = "";
+    });
+
+    dropZone.addEventListener("dragover",  e => { e.preventDefault(); dropZone.classList.add("drag-over"); });
+    dropZone.addEventListener("dragleave", () => dropZone.classList.remove("drag-over"));
+    dropZone.addEventListener("drop", e => {
+      e.preventDefault();
+      dropZone.classList.remove("drag-over");
+      addFiles(Array.from(e.dataTransfer.files).filter(f => f.type.startsWith("image/")));
+    });
+
+    function addFiles(files) {
+      files.forEach(file => {
+        const id = Date.now() + Math.random();
+        const card = createCard(file, id);
+        fileGrid.appendChild(card.el);
+        queue.push({ file, id, cardEl: card.el, badgeEl: card.badge });
+      });
+      if (queue.length > 0) {
+        dropZone.style.display = "none";
+        fileGrid.style.display = "flex";
+        btnRow.style.display   = "flex";
+      }
+    }
+
+    function createCard(file, id) {
+      const el   = document.createElement("div");
+      el.className = "file-card";
+      el.dataset.id = id;
+
+      const img  = document.createElement("img");
+      img.src = URL.createObjectURL(file);
+
+      const badge = document.createElement("span");
+      badge.className = "badge waiting";
+      badge.textContent = "대기";
+
+      const rmBtn = document.createElement("button");
+      rmBtn.className = "remove-btn";
+      rmBtn.textContent = "×";
+      rmBtn.title = "제거";
+      rmBtn.addEventListener("click", e => {
+        e.stopPropagation();
+        removeCard(id);
+      });
+
+      const name = document.createElement("div");
+      name.className = "name";
+      name.textContent = file.name;
+
+      el.appendChild(img);
+      el.appendChild(badge);
+      el.appendChild(rmBtn);
+      el.appendChild(name);
+      return { el, badge };
+    }
+
+    function removeCard(id) {
+      queue = queue.filter(q => {
+        if (q.id === id) { q.cardEl.remove(); return false; }
+        return true;
+      });
+      if (queue.length === 0) resetAll();
+    }
+
+    // ── 분석 시작 ──
+    analyzeBtn.addEventListener("click", async () => {
+      if (analyzing || queue.length === 0) return;
+      analyzing = true;
+      results   = [];
+
+      analyzeBtn.disabled = true;
+      addBtn.disabled     = true;
+      resetBtn.disabled   = true;
+      exportBtn.style.display = "none";
+      resultSec.style.display = "none";
+      resultBody.innerHTML    = "";
+      progressWrap.style.display = "block";
+
+      const total = queue.length;
+
+      for (let i = 0; i < total; i++) {
+        const item = queue[i];
+        updateProgress(i, total, item.file.name);
+        setBadge(item.badgeEl, "loading", "분석중");
+
+        const result = await analyzeFile(item.file);
+
+        if (result.success) {
+          setBadge(item.badgeEl, "done", "완료");
+          results.push({ filename: item.file.name, data: result.data });
+          appendResult(item.file.name, result.data, null);
+        } else {
+          setBadge(item.badgeEl, "error", "오류");
+          results.push({ filename: item.file.name, data: null });
+          appendResult(item.file.name, null, result.error);
+        }
+      }
+
+      updateProgress(total, total, "완료");
+      resultSec.style.display = "block";
+
+      const hasSuccess = results.some(r => r.data !== null);
+      if (hasSuccess) exportBtn.style.display = "inline-block";
+
+      analyzing = false;
+      analyzeBtn.disabled = false;
+      addBtn.disabled     = false;
+      resetBtn.disabled   = false;
+    });
+
+    async function analyzeFile(file) {
+      const form = new FormData();
+      form.append("image", file);
+      try {
+        const res  = await fetch("/analyze", { method: "POST", body: form });
+        return await res.json();
+      } catch (e) {
+        return { success: false, error: "네트워크 오류: " + e.message };
+      }
+    }
+
+    function updateProgress(done, total, label) {
+      const pct = total === 0 ? 0 : Math.round((done / total) * 100);
+      progressFill.style.width = pct + "%";
+      progressLbl.textContent  = done === total
+        ? `✅ ${total}개 완료`
+        : `분석 중 (${done + 1}/${total}) — ${label}`;
+    }
+
+    function setBadge(el, cls, text) {
+      el.className = "badge " + cls;
+      el.textContent = text;
+    }
+
+    // ── 결과 렌더 ──
+    function appendResult(filename, data, error) {
+      if (resultBody.children.length > 0) {
+        resultBody.appendChild(document.createElement("hr")).className = "divider";
+      }
+
+      const block = document.createElement("div");
+      block.className = "receipt-block";
+
+      const fnDiv = document.createElement("div");
+      fnDiv.className = "receipt-filename";
+      fnDiv.textContent = "📎 " + filename;
+      block.appendChild(fnDiv);
+
+      if (error) {
+        const errDiv = document.createElement("div");
+        errDiv.className = "err-inline";
+        errDiv.textContent = "오류: " + error;
+        block.appendChild(errDiv);
+        resultBody.appendChild(block);
+        return;
+      }
+
+      // 요약 헤더
+      const header = document.createElement("div");
+      header.className = "receipt-header";
+      header.innerHTML = `
+        <div><div class="rh-label">가맹점명</div><div class="rh-value">${esc(data["가맹점명"])}</div></div>
+        <div><div class="rh-label">결제 일시</div><div class="rh-value">${esc(data["결제일시"])}</div></div>
+        <div><div class="rh-label">총 금액</div><div class="rh-value blue">${fmt(data["총금액"])}</div></div>
+      `;
+      block.appendChild(header);
+
+      // 항목 테이블
+      const items = data["항목"] || [];
+      const table = document.createElement("table");
+      table.innerHTML = `
+        <thead><tr>
+          <th>품목명</th><th>수량</th><th>단가</th><th>금액</th>
+        </tr></thead>`;
+      const tbody = document.createElement("tbody");
+
+      if (items.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="4" class="no-items">항목 정보를 인식하지 못했습니다</td></tr>`;
+      } else {
+        items.forEach(item => {
+          const tr = document.createElement("tr");
+          tr.innerHTML = `
+            <td>${esc(item["품목명"] ?? "-")}</td>
+            <td>${item["수량"] ?? "-"}</td>
+            <td>${fmt(item["단가"])}</td>
+            <td>${fmt(item["금액"])}</td>`;
+          tbody.appendChild(tr);
+        });
+      }
+
+      table.appendChild(tbody);
+      block.appendChild(table);
+      resultBody.appendChild(block);
+    }
+
+    // ── 엑셀 다운로드 ──
+    exportBtn.addEventListener("click", async () => {
+      const payload = results.filter(r => r.data !== null);
+      if (payload.length === 0) return;
+
+      exportBtn.disabled   = true;
+      exportBtn.textContent = "⏳ 생성 중...";
+
+      try {
+        const res = await fetch("/export", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+        const blob = await res.blob();
+        const url  = URL.createObjectURL(blob);
+        const a    = document.createElement("a");
+        a.href     = url;
+        a.download = "영수증_분석결과.xlsx";
+        a.click();
+        URL.revokeObjectURL(url);
+      } catch (e) {
+        alert("엑셀 생성 오류: " + e.message);
+      }
+
+      exportBtn.disabled   = false;
+      exportBtn.textContent = "⬇ 엑셀 다운로드";
+    });
+
+    // ── 초기화 ──
+    resetBtn.addEventListener("click", resetAll);
+
+    function resetAll() {
+      queue    = [];
+      results  = [];
+      analyzing = false;
+      fileGrid.innerHTML      = "";
+      fileGrid.style.display  = "none";
+      btnRow.style.display    = "none";
+      dropZone.style.display  = "block";
+      progressWrap.style.display = "none";
+      resultSec.style.display = "none";
+      exportBtn.style.display = "none";
+      resultBody.innerHTML    = "";
+    }
+
+    // ── 유틸 ──
+    function fmt(n) {
+      const num = Number(n);
+      return (!isNaN(num) && num !== 0) ? num.toLocaleString("ko-KR") + "원" : "-";
+    }
+    function esc(str) {
+      return String(str ?? "").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+    }
+  </script>
+</body>
+</html>
