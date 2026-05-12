@@ -78,7 +78,9 @@ def analyze():
                         response_mime_type="application/json"
                     ),
                 )
-                data = json.loads(response.text)
+                # BOM(﻿) 및 앞뒤 공백 제거 후 파싱
+                text = response.text.lstrip('﻿').strip()
+                data = json.loads(text)
                 return jsonify({"success": True, "data": data, "model": model})
 
             except ServerError as e:
